@@ -1,0 +1,3 @@
+algoritmo,execucoes,media_tempo_segundos,desvio_padrao_tempo_segundos,media_iteracoes,desvio_padrao_iteracoes,taxa_sucesso,media_conflitos_finais,media_fitness_final,melhor_conflitos,pior_conflitos
+GA,50,0.21155865099979565,0.14652020428682203,637.8,438.31650664787884,0.48,0.52,0.74,0,1
+GRASP,50,0.004899872659843822,0.0045989929456621,6.08,5.935789753689058,1.0,0,1.0,0,0
