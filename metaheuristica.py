@@ -9,377 +9,325 @@ from statistics import mean, pstdev
 
 N = 8
 
-OUTPUT_DIR = Path("output")
-OUTPUT_DIR.mkdir(exist_ok=True)
-
+DIRETORIO_SAIDA = Path("output")
+DIRETORIO_SAIDA.mkdir(exist_ok=True)
 
 @dataclass
-class RunResult:
-    algorithm: str
-    run_id: int
-    time_seconds: float
-    iterations: int
-    best_solution: str
-    final_conflicts: int
-    success: int
-    final_fitness: float
+class ResultadoExecucao:
+    algoritmo: str
+    id_execucao: int
+    tempo_segundos: float
+    iteracoes: int
+    melhor_solucao: str
+    conflitos_finais: int
+    sucesso: int
+    fitness_final: float
 
-
-def count_conflicts(board):
-    conflicts = 0
+def contar_conflitos(tabuleiro):
+    conflitos = 0
     for i in range(N):
         for j in range(i + 1, N):
-            same_row = board[i] == board[j]
-            same_diag = abs(board[i] - board[j]) == abs(i - j)
-            if same_row or same_diag:
-                conflicts += 1
-    return conflicts
+            mesma_linha = tabuleiro[i] == tabuleiro[j]
+            mesma_diagonal = abs(tabuleiro[i] - tabuleiro[j]) == abs(i - j)
+            if mesma_linha or mesma_diagonal:
+                conflitos += 1
+    return conflitos
 
+def fitness_a_partir_de_conflitos(conflitos):
+    return 1 / (1 + conflitos)
 
-def fitness_from_conflicts(conflicts):
-    return 1 / (1 + conflicts)
-
-
-def random_board():
+def tabuleiro_aleatorio():
     return [random.randint(0, N - 1) for _ in range(N)]
 
-
-def board_to_binary(board):
+def tabuleiro_para_binario(tabuleiro):
     bits = []
-    for row in board:
-        bits.extend(int(b) for b in format(row, "03b"))
+    for linha in tabuleiro:
+        bits.extend(int(b) for b in format(linha, "03b"))
     return bits
 
-
-def binary_to_board(bits):
-    board = []
+def binario_para_tabuleiro(bits):
+    tabuleiro = []
     for i in range(0, len(bits), 3):
-        chunk = bits[i:i + 3]
-        if len(chunk) < 3:
-            chunk = chunk + [0] * (3 - len(chunk))
-        row = int("".join(str(b) for b in chunk), 2) % N
-        board.append(row)
-    return board[:N]
+        trecho = bits[i:i + 3]
+        if len(trecho) < 3:
+            trecho = trecho + [0] * (3 - len(trecho))
+        linha = int("".join(str(b) for b in trecho), 2) % N
+        tabuleiro.append(linha)
+    return tabuleiro[:N]
 
+def tabuleiro_para_string(tabuleiro):
+    return "[" + ", ".join(map(str, tabuleiro)) + "]"
 
-def board_to_str(board):
-    return "[" + ", ".join(map(str, board)) + "]"
-
-
-def unique_top_solutions(results, top_k=5):
-    seen = set()
-    top = []
-    for r in sorted(results, key=lambda x: (x["final_conflicts"], x["time_seconds"])):
-        s = r["best_solution"]
-        if s not in seen:
-            seen.add(s)
-            top.append(r)
-        if len(top) == top_k:
+def melhores_solucaoes_distintas(resultados, top_k=5):
+    vistos = set()
+    melhores = []
+    for r in sorted(resultados, key=lambda x: (x["conflitos_finais"], x["tempo_segundos"])):
+        s = r["melhor_solucao"]
+        if s not in vistos:
+            vistos.add(s)
+            melhores.append(r)
+        if len(melhores) == top_k:
             break
-    return top
+    return melhores
 
+def construcao_gulosa_randomizada(tamanho_rcl):
+    tabuleiro = [-1] * N
+    for coluna in range(N):
+        candidatos = []
+        for linha in range(N):
+            tabuleiro[coluna] = linha
+            conflitos = 0
+            for coluna_anterior in range(coluna):
+                if tabuleiro[coluna_anterior] == linha or abs(tabuleiro[coluna_anterior] - linha) == abs(coluna_anterior - coluna):
+                    conflitos += 1
+            candidatos.append((conflitos, linha))
+        candidatos.sort(key=lambda x: x[0])
+        rcl = candidatos[:max(1, min(tamanho_rcl, len(candidatos)))]
+        tabuleiro[coluna] = random.choice(rcl)[1]
+    return tabuleiro
 
-def greedy_randomized_construction(rcl_size):
-    board = [-1] * N
-    for col in range(N):
-        candidates = []
-        for row in range(N):
-            board[col] = row
-            conflicts = 0
-            for prev_col in range(col):
-                if board[prev_col] == row or abs(board[prev_col] - row) == abs(prev_col - col):
-                    conflicts += 1
-            candidates.append((conflicts, row))
-        candidates.sort(key=lambda x: x[0])
-        rcl = candidates[:max(1, min(rcl_size, len(candidates)))]
-        board[col] = random.choice(rcl)[1]
-    return board
-
-
-def local_search(board):
-    current = board[:]
-    current_conflicts = count_conflicts(current)
-    improved = True
-
-    while improved:
-        improved = False
-        best_board = current[:]
-        best_conflicts = current_conflicts
-
-        for col in range(N):
-            original = current[col]
-            for row in range(N):
-                if row == original:
+def busca_local(tabuleiro):
+    atual = tabuleiro[:]
+    conflitos_atual = contar_conflitos(atual)
+    melhorou = True
+    while melhorou:
+        melhorou = False
+        melhor_tabuleiro = atual[:]
+        melhor_conflitos = conflitos_atual
+        for coluna in range(N):
+            original = atual[coluna]
+            for linha in range(N):
+                if linha == original:
                     continue
-                candidate = current[:]
-                candidate[col] = row
-                c = count_conflicts(candidate)
-                if c < best_conflicts:
-                    best_conflicts = c
-                    best_board = candidate[:]
-                    improved = True
-
-        current = best_board
-        current_conflicts = best_conflicts
-
-    return current
-
+                candidato = atual[:]
+                candidato[coluna] = linha
+                c = contar_conflitos(candidato)
+                if c < melhor_conflitos:
+                    melhor_conflitos = c
+                    melhor_tabuleiro = candidato[:]
+                    melhorou = True
+        atual = melhor_tabuleiro
+        conflitos_atual = melhor_conflitos
+    return atual
 
 def grasp(max_iterations=200, rcl_size=3):
-    start = time.perf_counter()
-    best_board = None
-    best_conflicts = math.inf
-    iterations_used = 0
-
+    inicio = time.perf_counter()
+    melhor_tabuleiro = None
+    melhores_conflitos = math.inf
+    iteracoes_usadas = 0
     for it in range(max_iterations):
-        iterations_used = it + 1
-        candidate = greedy_randomized_construction(rcl_size)
-        candidate = local_search(candidate)
-        conflicts = count_conflicts(candidate)
-
-        if conflicts < best_conflicts:
-            best_conflicts = conflicts
-            best_board = candidate[:]
-
-        if best_conflicts == 0:
+        iteracoes_usadas = it + 1
+        candidato = construcao_gulosa_randomizada(rcl_size)
+        candidato = busca_local(candidato)
+        conflitos = contar_conflitos(candidato)
+        if conflitos < melhores_conflitos:
+            melhores_conflitos = conflitos
+            melhor_tabuleiro = candidato[:]
+        if melhores_conflitos == 0:
             break
-
-    elapsed = time.perf_counter() - start
-    final_fitness = fitness_from_conflicts(best_conflicts)
+    tempo_decorrido = time.perf_counter() - inicio
     return {
-        "algorithm": "GRASP",
-        "time_seconds": elapsed,
-        "iterations": iterations_used,
-        "best_solution": best_board,
-        "final_conflicts": best_conflicts,
-        "final_fitness": fitness_from_conflicts(best_conflicts),
-        "success": int(best_conflicts == 0),
+        "algoritmo": "GRASP",
+        "tempo_segundos": tempo_decorrido,
+        "iteracoes": iteracoes_usadas,
+        "melhor_solucao": melhor_tabuleiro,
+        "conflitos_finais": melhores_conflitos,
+        "fitness_final": fitness_a_partir_de_conflitos(melhores_conflitos),
+        "sucesso": int(melhores_conflitos == 0),
     }
 
+def individuo_binario_aleatorio():
+    return tabuleiro_para_binario(tabuleiro_aleatorio())
 
-def random_binary_individual():
-    return board_to_binary(random_board())
-
-
-def roulette_select(population, fitnesses):
-    total = sum(fitnesses)
+def selecao_roleta(populacao, aptidoes):
+    total = sum(aptidoes)
     if total == 0:
-        return random.choice(population)
-    pick = random.uniform(0, total)
-    acc = 0
-    for individual, fit in zip(population, fitnesses):
-        acc += fit
-        if acc >= pick:
-            return individual
-    return population[-1]
+        return random.choice(populacao)
+    escolha = random.uniform(0, total)
+    acumulado = 0
+    for individuo, aptidao in zip(populacao, aptidoes):
+        acumulado += aptidao
+        if acumulado >= escolha:
+            return individuo
+    return populacao[-1]
 
+def cruzamento_um_ponto(p1, p2):
+    ponto = random.randint(1, len(p1) - 1)
+    return p1[:ponto] + p2[ponto:]
 
-def one_point_crossover(p1, p2):
-    point = random.randint(1, len(p1) - 1)
-    return p1[:point] + p2[point:]
+def mutar(individuo, taxa_mutacao):
+    mutado = individuo[:]
+    for i in range(len(mutado)):
+        if random.random() < taxa_mutacao:
+            mutado[i] = 1 - mutado[i]
+    return mutado
 
-
-def mutate(individual, mutation_rate):
-    mutated = individual[:]
-    for i in range(len(mutated)):
-        if random.random() < mutation_rate:
-            mutated[i] = 1 - mutated[i]
-    return mutated
-
-
-def genetic_algorithm(pop_size=20, crossover_rate=0.80, mutation_rate=0.03, max_generations=1000):
-    start = time.perf_counter()
-    population = [random_binary_individual() for _ in range(pop_size)]
-    best_solution = None
-    best_conflicts = math.inf
-    generations_used = 0
-
-    for gen in range(max_generations):
-        generations_used = gen + 1
-        decoded = [binary_to_board(ind) for ind in population]
-        conflicts_list = [count_conflicts(board) for board in decoded]
-        fitnesses = [fitness_from_conflicts(c) for c in conflicts_list]
-
-        best_idx = min(range(len(conflicts_list)), key=lambda i: conflicts_list[i])
-        if conflicts_list[best_idx] < best_conflicts:
-            best_conflicts = conflicts_list[best_idx]
-            best_solution = decoded[best_idx][:]
-
-        if best_conflicts == 0:
+def algoritmo_genetico(tamanho_populacao=20, taxa_cruzamento=0.80, taxa_mutacao=0.03, max_geracoes=1000):
+    inicio = time.perf_counter()
+    populacao = [individuo_binario_aleatorio() for _ in range(tamanho_populacao)]
+    melhor_solucao = None
+    melhores_conflitos = math.inf
+    geracoes_usadas = 0
+    for geracao in range(max_geracoes):
+        geracoes_usadas = geracao + 1
+        decodificados = [binario_para_tabuleiro(ind) for ind in populacao]
+        lista_conflitos = [contar_conflitos(tabuleiro) for tabuleiro in decodificados]
+        aptidoes = [fitness_a_partir_de_conflitos(c) for c in lista_conflitos]
+        melhor_idx = min(range(len(lista_conflitos)), key=lambda i: lista_conflitos[i])
+        if lista_conflitos[melhor_idx] < melhores_conflitos:
+            melhores_conflitos = lista_conflitos[melhor_idx]
+            melhor_solucao = decodificados[melhor_idx][:]
+        if melhores_conflitos == 0:
             break
-
-        elite_count = max(1, pop_size // 5)
-        elite_indices = sorted(range(pop_size), key=lambda i: conflicts_list[i])[:elite_count]
-        new_population = [population[i][:] for i in elite_indices]
-
-        while len(new_population) < pop_size:
-            parent1 = roulette_select(population, fitnesses)
-            parent2 = roulette_select(population, fitnesses)
-            child = parent1[:]
-            if random.random() < crossover_rate:
-                child = one_point_crossover(parent1, parent2)
-            child = mutate(child, mutation_rate)
-            new_population.append(child)
-
-        population = new_population
-
-    elapsed = time.perf_counter() - start
-    
+        elite_count = max(1, tamanho_populacao // 5)
+        elite_indices = sorted(range(tamanho_populacao), key=lambda i: lista_conflitos[i])[:elite_count]
+        nova_populacao = [populacao[i][:] for i in elite_indices]
+        while len(nova_populacao) < tamanho_populacao:
+            pai1 = selecao_roleta(populacao, aptidoes)
+            pai2 = selecao_roleta(populacao, aptidoes)
+            filho = pai1[:]
+            if random.random() < taxa_cruzamento:
+                filho = cruzamento_um_ponto(pai1, pai2)
+            filho = mutar(filho, taxa_mutacao)
+            nova_populacao.append(filho)
+        populacao = nova_populacao
+    tempo_decorrido = time.perf_counter() - inicio
     return {
-        "algorithm": "GA",
-        "time_seconds": elapsed,
-        "iterations": generations_used,
-        "best_solution": best_solution,
-        "final_conflicts": best_conflicts,
-        "final_fitness": fitness_from_conflicts(best_conflicts),
-        "success": int(best_conflicts == 0),
+        "algoritmo": "GA",
+        "tempo_segundos": tempo_decorrido,
+        "iteracoes": geracoes_usadas,
+        "melhor_solucao": melhor_solucao,
+        "conflitos_finais": melhores_conflitos,
+        "fitness_final": fitness_a_partir_de_conflitos(melhores_conflitos),
+        "sucesso": int(melhores_conflitos == 0),
     }
 
-
-def run_experiments(runs, grasp_iterations, rcl_size, pop_size, crossover_rate, mutation_rate, max_generations):
-    results = []
-    for i in range(1, runs + 1):
-        r = grasp(grasp_iterations, rcl_size)
-        results.append(RunResult(
-            algorithm=r["algorithm"],
-            run_id=i,
-            time_seconds=r["time_seconds"],
-            iterations=r["iterations"],
-            best_solution=board_to_str(r["best_solution"]),
-            final_conflicts=r["final_conflicts"],
-            final_fitness=r["final_fitness"],
-            success=r["success"]
+def executar_experimentos(execucao_total, iteracoes_grasp, tamanho_rcl, tamanho_populacao, taxa_cruzamento, taxa_mutacao, max_geracoes):
+    resultados = []
+    for i in range(1, execucao_total + 1):
+        r = grasp(iteracoes_grasp, tamanho_rcl)
+        resultados.append(ResultadoExecucao(
+            algoritmo=r["algoritmo"],
+            id_execucao=i,
+            tempo_segundos=r["tempo_segundos"],
+            iteracoes=r["iteracoes"],
+            melhor_solucao=tabuleiro_para_string(r["melhor_solucao"]),
+            conflitos_finais=r["conflitos_finais"],
+            fitness_final=r["fitness_final"],
+            sucesso=r["sucesso"]
         ))
-
-    for i in range(1, runs + 1):
-        r = genetic_algorithm(pop_size, crossover_rate, mutation_rate, max_generations)
-        results.append(RunResult(
-            algorithm=r["algorithm"],
-            run_id=i,
-            time_seconds=r["time_seconds"],
-            iterations=r["iterations"],
-            best_solution=board_to_str(r["best_solution"]),
-            final_conflicts=r["final_conflicts"],
-            final_fitness=r["final_fitness"],
-            success=r["success"]
+    for i in range(1, execucao_total + 1):
+        r = algoritmo_genetico(tamanho_populacao, taxa_cruzamento, taxa_mutacao, max_geracoes)
+        resultados.append(ResultadoExecucao(
+            algoritmo=r["algoritmo"],
+            id_execucao=i,
+            tempo_segundos=r["tempo_segundos"],
+            iteracoes=r["iteracoes"],
+            melhor_solucao=tabuleiro_para_string(r["melhor_solucao"]),
+            conflitos_finais=r["conflitos_finais"],
+            fitness_final=r["fitness_final"],
+            sucesso=r["sucesso"]
         ))
+    return resultados
 
-    return results
-
-
-def summarize(results):
-    summary = []
-    for alg in sorted(set(r.algorithm for r in results)):
-        alg_results = [r for r in results if r.algorithm == alg]
-        times = [r.time_seconds for r in alg_results]
-        iters = [r.iterations for r in alg_results]
-        conflicts = [r.final_conflicts for r in alg_results]
-        success_rate = sum(r.success for r in alg_results) / len(alg_results)
-        summary.append({
-            "algorithm": alg,
-            "runs": len(alg_results),
-            "mean_time_seconds": mean(times),
-            "std_time_seconds": pstdev(times) if len(times) > 1 else 0.0,
-            "mean_iterations": mean(iters),
-            "std_iterations": pstdev(iters) if len(iters) > 1 else 0.0,
-            "success_rate": success_rate,
-            "mean_final_conflicts": mean(conflicts),
-            "best_conflicts": min(conflicts),
-            "worst_conflicts": max(conflicts),
+def resumir(resultados):
+    resumo = []
+    for alg in sorted(set(r.algoritmo for r in resultados)):
+        resultados_alg = [r for r in resultados if r.algoritmo == alg]
+        tempos = [r.tempo_segundos for r in resultados_alg]
+        iteracoes = [r.iteracoes for r in resultados_alg]
+        conflitos = [r.conflitos_finais for r in resultados_alg]
+        fitness = [r.fitness_final for r in resultados_alg]
+        taxa_sucesso = sum(r.sucesso for r in resultados_alg) / len(resultados_alg)
+        resumo.append({
+            "algoritmo": alg,
+            "execucoes": len(resultados_alg),
+            "media_tempo_segundos": mean(tempos),
+            "desvio_padrao_tempo_segundos": pstdev(tempos) if len(tempos) > 1 else 0.0,
+            "media_iteracoes": mean(iteracoes),
+            "desvio_padrao_iteracoes": pstdev(iteracoes) if len(iteracoes) > 1 else 0.0,
+            "taxa_sucesso": taxa_sucesso,
+            "media_conflitos_finais": mean(conflitos),
+            "media_fitness_final": mean(fitness),
+            "melhor_conflitos": min(conflitos),
+            "pior_conflitos": max(conflitos),
         })
-    return summary
+    return resumo
 
+def salvar_resultados_csv(resultados, nome_arquivo="results.csv"):
+    caminho = DIRETORIO_SAIDA / nome_arquivo
+    with open(caminho, "w", newline="", encoding="utf-8") as f:
+        escritor = csv.DictWriter(f, fieldnames=list(asdict(resultados[0]).keys()))
+        escritor.writeheader()
+        for r in resultados:
+            escritor.writerow(asdict(r))
+    return caminho
 
-def save_results_csv(results, filename="results.csv"):
-    path = OUTPUT_DIR / filename
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(asdict(results[0]).keys()))
-        writer.writeheader()
-        for r in results:
-            writer.writerow(asdict(r))
-    return path
+def salvar_resumo_csv(resumo, nome_arquivo="summary.csv"):
+    caminho = DIRETORIO_SAIDA / nome_arquivo
+    with open(caminho, "w", newline="", encoding="utf-8") as f:
+        escritor = csv.DictWriter(f, fieldnames=list(resumo[0].keys()))
+        escritor.writeheader()
+        for linha in resumo:
+            escritor.writerow(linha)
+    return caminho
 
+def salvar_melhores_solucoes_por_algoritmo_csv(resultados, nome_arquivo="top_solutions_by_algorithm.csv", top_k=5):
+    caminho = DIRETORIO_SAIDA / nome_arquivo
+    linhas = []
+    algoritmos = sorted(set(r.algoritmo for r in resultados))
+    for alg in algoritmos:
+        resultados_alg = [r.__dict__ for r in resultados if r.algoritmo == alg]
+        melhores = melhores_solucaoes_distintas(resultados_alg, top_k=top_k)
+        linhas.extend(melhores)
+    campos = [
+        "algoritmo",
+        "id_execucao",
+        "tempo_segundos",
+        "iteracoes",
+        "melhor_solucao",
+        "conflitos_finais",
+        "fitness_final",
+        "sucesso",
+    ]
+    with open(caminho, "w", newline="", encoding="utf-8") as f:
+        escritor = csv.DictWriter(f, fieldnames=campos)
+        escritor.writeheader()
+        for linha in linhas:
+            escritor.writerow(linha)
+    return caminho
 
-def save_summary_csv(summary, filename="summary.csv"):
-    path = OUTPUT_DIR / filename
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(summary[0].keys()))
-        writer.writeheader()
-        for row in summary:
-            writer.writerow(row)
-    return path
-
-
-def save_top_solutions_by_algorithm_csv(results, filename="top_solutions_by_algorithm.csv", top_k=5):
-    path = OUTPUT_DIR / filename
-
-    rows = []
-    algorithms = sorted(set(r.algorithm for r in results))
-
-    for alg in algorithms:
-        alg_results = [r.__dict__ for r in results if r.algorithm == alg]
-        top = unique_top_solutions(alg_results, top_k=top_k)
-        rows.extend(top)
-
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=[
-    "algorithm",
-    "run_id",
-    "time_seconds",
-    "iterations",
-    "best_solution",
-    "final_conflicts",
-    "final_fitness",
-    "success",
-],
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
-
-    return path
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="8 Queens metaheuristics: GRASP and Genetic Algorithm")
-    parser.add_argument("--runs", type=int, default=50)
-    parser.add_argument("--grasp-iterations", type=int, default=200)
-    parser.add_argument("--rcl-size", type=int, default=3)
-    parser.add_argument("--population", type=int, default=20)
-    parser.add_argument("--crossover-rate", type=float, default=0.80)
-    parser.add_argument("--mutation-rate", type=float, default=0.03)
-    parser.add_argument("--max-generations", type=int, default=1000)
+def argumentos():
+    parser = argparse.ArgumentParser(description="8 Rainhas: GRASP e Algoritmo Genético")
+    parser.add_argument("--execucoes", type=int, default=50)
+    parser.add_argument("--iteracoes-grasp", type=int, default=200)
+    parser.add_argument("--tamanho-rcl", type=int, default=3)
+    parser.add_argument("--populacao", type=int, default=20)
+    parser.add_argument("--taxa-cruzamento", type=float, default=0.80)
+    parser.add_argument("--taxa-mutacao", type=float, default=0.03)
+    parser.add_argument("--max-geracoes", type=int, default=1000)
     return parser.parse_args()
 
-
 def main():
-    args = parse_args()
-
-    results = run_experiments(
-        runs=args.runs,
-        grasp_iterations=args.grasp_iterations,
-        rcl_size=args.rcl_size,
-        pop_size=args.population,
-        crossover_rate=args.crossover_rate,
-        mutation_rate=args.mutation_rate,
-        max_generations=args.max_generations,
+    args = argumentos()
+    resultados = executar_experimentos(
+        execucao_total=args.execucoes,
+        iteracoes_grasp=args.iteracoes_grasp,
+        tamanho_rcl=args.tamanho_rcl,
+        tamanho_populacao=args.populacao,
+        taxa_cruzamento=args.taxa_cruzamento,
+        taxa_mutacao=args.taxa_mutacao,
+        max_geracoes=args.max_geracoes,
     )
-
-    summary = summarize(results)
-
-    results_path = save_results_csv(results)
-    summary_path = save_summary_csv(summary)
-    top_path = save_top_solutions_by_algorithm_csv(results)
-
-    print("Saved:", results_path)
-    print("Saved:", summary_path)
-    print("Saved:", top_path)
-
-    for row in summary:
-        print(row)
-
+    resumo = resumir(resultados)
+    caminho_resultados = salvar_resultados_csv(resultados)
+    caminho_resumo = salvar_resumo_csv(resumo)
+    caminho_top = salvar_melhores_solucoes_por_algoritmo_csv(resultados)
+    print("Saved:", caminho_resultados)
+    print("Saved:", caminho_resumo)
+    print("Saved:", caminho_top)
+    for linha in resumo:
+        print(linha)
 
 if __name__ == "__main__":
     main()
