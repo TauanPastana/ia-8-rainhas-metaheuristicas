@@ -8,7 +8,6 @@ services:
       - TZ=America/Fortaleza
       - GENERIC_TIMEZONE=America/Fortaleza
       - N8N_ENABLE_EXECUTE_COMMAND=true
-      - N8N_ENABLE_UNSAFE_CORE_NODES=true
       - NODES_EXCLUDE=[]
       - N8N_ENCRYPTION_KEY=coloque_uma_chave_forte_aqui
     volumes:
