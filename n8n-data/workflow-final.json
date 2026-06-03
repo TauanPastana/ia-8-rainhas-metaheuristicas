@@ -1,0 +1,150 @@
+{
+  "name": "8 Rainhas - Automacao com Form Trigger",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "af0736fb-b650-48e9-9a5f-bf8c12cf3aea",
+        "formTitle": "8 Rainhas - Parametros",
+        "formDescription": "Ajuste apenas os parametros variaveis para executar os experimentos.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "execucoes",
+              "fieldType": "number",
+              "defaultValue": "50",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "iteracoes_grasp",
+              "fieldType": "number",
+              "defaultValue": "200"
+            },
+            {
+              "fieldLabel": "tamanho_rcl",
+              "fieldType": "number",
+              "defaultValue": "3"
+            },
+            {
+              "fieldLabel": "populacao",
+              "fieldType": "number",
+              "defaultValue": "20"
+            },
+            {
+              "fieldLabel": "taxa_cruzamento",
+              "fieldType": "number",
+              "defaultValue": "0.8"
+            },
+            {
+              "fieldLabel": "taxa_mutacao",
+              "fieldType": "number",
+              "defaultValue": "0.03"
+            },
+            {
+              "fieldLabel": "max_geracoes",
+              "fieldType": "number",
+              "defaultValue": "1000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2d26f444-ee52-4b57-bd61-884bd16ed0c0",
+      "name": "Form Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "af0736fb-b650-48e9-9a5f-bf8c12cf3aea",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = $json.body ?? $json.data ?? $json;\nlet cmd = 'cd /home/node/.n8n-files && python3 metaheuristica.py';\ncmd += ` --execucoes ${Number(f.execucoes ?? 50)}`;\ncmd += ` --iteracoes-grasp ${Number(f.iteracoes_grasp ?? 200)}`;\ncmd += ` --tamanho-rcl ${Number(f.tamanho_rcl ?? 3)}`;\ncmd += ` --populacao ${Number(f.populacao ?? 20)}`;\ncmd += ` --taxa-cruzamento ${Number(f.taxa_cruzamento ?? 0.8)}`;\ncmd += ` --taxa-mutacao ${Number(f.taxa_mutacao ?? 0.03)}`;\ncmd += ` --max-geracoes ${Number(f.max_geracoes ?? 1000)}`;\nreturn [{ json: { ...f, comando: cmd } }];"
+      },
+      "id": "09cdb6b5-320a-43f5-9fe9-9e8e30cdb35f",
+      "name": "Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{$json.comando}}"
+      },
+      "id": "c0ce43e0-f416-4f98-9d63-29fa923197f6",
+      "name": "Execute Command",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        544,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = $input.first().json;\n\nlet resumoPython = null;\ntry {\n  resumoPython = JSON.parse((f.stdout || '').trim());\n} catch (e) {\n  resumoPython = f.stdout || '';\n}\n\nreturn [{\n  json: {\n    sucesso: f.exitCode === 0,\n    exitCode: f.exitCode,\n    parametros: {\n      execucoes: f.execucoes ?? null,\n      iteracoes_grasp: f.iteracoes_grasp ?? null,\n      tamanho_rcl: f.tamanho_rcl ?? null,\n      populacao: f.populacao ?? null,\n      taxa_cruzamento: f.taxa_cruzamento ?? null,\n      taxa_mutacao: f.taxa_mutacao ?? null,\n      max_geracoes: f.max_geracoes ?? null\n    },\n    saida_python: resumoPython,\n    stdout: f.stdout ?? '',\n    stderr: f.stderr ?? ''\n  }\n}];"
+      },
+      "id": "9b4d4947-3c9c-498d-96f5-98c3f3e85dd7",
+      "name": "Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ec9c6223-fd6c-4654-86e5-01d668723a52",
+  "meta": {
+    "instanceId": "3fca8bb79f85edd05874db85ebbd0585da4549602e186fa9891c0924203fa69a"
+  },
+  "nodeGroups": [],
+  "id": "zUMtbAkkoTajQhjc",
+  "tags": []
+}

@@ -1,0 +1,20 @@
+services:
+  n8n:
+    build: .
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - TZ=America/Fortaleza
+      - GENERIC_TIMEZONE=America/Fortaleza
+      - N8N_ENABLE_EXECUTE_COMMAND=true
+      - N8N_ENABLE_UNSAFE_CORE_NODES=true
+      - NODES_EXCLUDE=[]
+      - N8N_ENCRYPTION_KEY=coloque_uma_chave_forte_aqui
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - /media/tauan/Arquivos Tauan/CBSI/5° Semestre/Inteligencia artificial/ia-8-rainhas-metaheuristicas:/home/node/.n8n-files
+    command: start
+
+volumes:
+  n8n_data:

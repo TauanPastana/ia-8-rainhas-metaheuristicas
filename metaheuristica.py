@@ -3,13 +3,14 @@ import csv
 import math
 import random
 import time
+import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from statistics import mean, pstdev
 
 N = 8
 
-DIRETORIO_SAIDA = Path("output")
+DIRETORIO_SAIDA = Path("/home/node/output")
 DIRETORIO_SAIDA.mkdir(exist_ok=True)
 
 @dataclass
@@ -23,21 +24,23 @@ class ResultadoExecucao:
     sucesso: int
     fitness_final: float
 
+
 def contar_conflitos(tabuleiro):
     conflitos = 0
     for i in range(N):
         for j in range(i + 1, N):
-            mesma_linha = tabuleiro[i] == tabuleiro[j]
-            mesma_diagonal = abs(tabuleiro[i] - tabuleiro[j]) == abs(i - j)
-            if mesma_linha or mesma_diagonal:
+            if tabuleiro[i] == tabuleiro[j] or abs(tabuleiro[i] - tabuleiro[j]) == abs(i - j):
                 conflitos += 1
     return conflitos
+
 
 def fitness_a_partir_de_conflitos(conflitos):
     return 1 / (1 + conflitos)
 
+
 def tabuleiro_aleatorio():
     return [random.randint(0, N - 1) for _ in range(N)]
+
 
 def tabuleiro_para_binario(tabuleiro):
     bits = []
@@ -45,18 +48,20 @@ def tabuleiro_para_binario(tabuleiro):
         bits.extend(int(b) for b in format(linha, "03b"))
     return bits
 
+
 def binario_para_tabuleiro(bits):
     tabuleiro = []
     for i in range(0, len(bits), 3):
         trecho = bits[i:i + 3]
         if len(trecho) < 3:
             trecho = trecho + [0] * (3 - len(trecho))
-        linha = int("".join(str(b) for b in trecho), 2) % N
-        tabuleiro.append(linha)
+        tabuleiro.append(int("".join(str(b) for b in trecho), 2) % N)
     return tabuleiro[:N]
+
 
 def tabuleiro_para_string(tabuleiro):
     return "[" + ", ".join(map(str, tabuleiro)) + "]"
+
 
 def melhores_solucaoes_distintas(resultados, top_k=5):
     vistos = set()
@@ -69,6 +74,7 @@ def melhores_solucaoes_distintas(resultados, top_k=5):
         if len(melhores) == top_k:
             break
     return melhores
+
 
 def construcao_gulosa_randomizada(tamanho_rcl):
     tabuleiro = [-1] * N
@@ -85,6 +91,7 @@ def construcao_gulosa_randomizada(tamanho_rcl):
         rcl = candidatos[:max(1, min(tamanho_rcl, len(candidatos)))]
         tabuleiro[coluna] = random.choice(rcl)[1]
     return tabuleiro
+
 
 def busca_local(tabuleiro):
     atual = tabuleiro[:]
@@ -110,6 +117,7 @@ def busca_local(tabuleiro):
         conflitos_atual = melhor_conflitos
     return atual
 
+
 def grasp(max_iterations=200, rcl_size=3):
     inicio = time.perf_counter()
     melhor_tabuleiro = None
@@ -117,8 +125,7 @@ def grasp(max_iterations=200, rcl_size=3):
     iteracoes_usadas = 0
     for it in range(max_iterations):
         iteracoes_usadas = it + 1
-        candidato = construcao_gulosa_randomizada(rcl_size)
-        candidato = busca_local(candidato)
+        candidato = busca_local(construcao_gulosa_randomizada(rcl_size))
         conflitos = contar_conflitos(candidato)
         if conflitos < melhores_conflitos:
             melhores_conflitos = conflitos
@@ -136,8 +143,10 @@ def grasp(max_iterations=200, rcl_size=3):
         "sucesso": int(melhores_conflitos == 0),
     }
 
+
 def individuo_binario_aleatorio():
     return tabuleiro_para_binario(tabuleiro_aleatorio())
+
 
 def selecao_roleta(populacao, aptidoes):
     total = sum(aptidoes)
@@ -151,9 +160,11 @@ def selecao_roleta(populacao, aptidoes):
             return individuo
     return populacao[-1]
 
+
 def cruzamento_um_ponto(p1, p2):
     ponto = random.randint(1, len(p1) - 1)
     return p1[:ponto] + p2[ponto:]
+
 
 def mutar(individuo, taxa_mutacao):
     mutado = individuo[:]
@@ -161,6 +172,7 @@ def mutar(individuo, taxa_mutacao):
         if random.random() < taxa_mutacao:
             mutado[i] = 1 - mutado[i]
     return mutado
+
 
 def algoritmo_genetico(tamanho_populacao=20, taxa_cruzamento=0.80, taxa_mutacao=0.03, max_geracoes=1000):
     inicio = time.perf_counter()
@@ -202,33 +214,17 @@ def algoritmo_genetico(tamanho_populacao=20, taxa_cruzamento=0.80, taxa_mutacao=
         "sucesso": int(melhores_conflitos == 0),
     }
 
+
 def executar_experimentos(execucao_total, iteracoes_grasp, tamanho_rcl, tamanho_populacao, taxa_cruzamento, taxa_mutacao, max_geracoes):
     resultados = []
     for i in range(1, execucao_total + 1):
         r = grasp(iteracoes_grasp, tamanho_rcl)
-        resultados.append(ResultadoExecucao(
-            algoritmo=r["algoritmo"],
-            id_execucao=i,
-            tempo_segundos=r["tempo_segundos"],
-            iteracoes=r["iteracoes"],
-            melhor_solucao=tabuleiro_para_string(r["melhor_solucao"]),
-            conflitos_finais=r["conflitos_finais"],
-            fitness_final=r["fitness_final"],
-            sucesso=r["sucesso"]
-        ))
+        resultados.append(ResultadoExecucao(r["algoritmo"], i, r["tempo_segundos"], r["iteracoes"], tabuleiro_para_string(r["melhor_solucao"]), r["conflitos_finais"], r["sucesso"], r["fitness_final"]))
     for i in range(1, execucao_total + 1):
         r = algoritmo_genetico(tamanho_populacao, taxa_cruzamento, taxa_mutacao, max_geracoes)
-        resultados.append(ResultadoExecucao(
-            algoritmo=r["algoritmo"],
-            id_execucao=i,
-            tempo_segundos=r["tempo_segundos"],
-            iteracoes=r["iteracoes"],
-            melhor_solucao=tabuleiro_para_string(r["melhor_solucao"]),
-            conflitos_finais=r["conflitos_finais"],
-            fitness_final=r["fitness_final"],
-            sucesso=r["sucesso"]
-        ))
+        resultados.append(ResultadoExecucao(r["algoritmo"], i, r["tempo_segundos"], r["iteracoes"], tabuleiro_para_string(r["melhor_solucao"]), r["conflitos_finais"], r["sucesso"], r["fitness_final"]))
     return resultados
+
 
 def resumir(resultados):
     resumo = []
@@ -254,6 +250,7 @@ def resumir(resultados):
         })
     return resumo
 
+
 def salvar_resultados_csv(resultados, nome_arquivo="results.csv"):
     caminho = DIRETORIO_SAIDA / nome_arquivo
     with open(caminho, "w", newline="", encoding="utf-8") as f:
@@ -262,6 +259,7 @@ def salvar_resultados_csv(resultados, nome_arquivo="results.csv"):
         for r in resultados:
             escritor.writerow(asdict(r))
     return caminho
+
 
 def salvar_resumo_csv(resumo, nome_arquivo="summary.csv"):
     caminho = DIRETORIO_SAIDA / nome_arquivo
@@ -272,6 +270,7 @@ def salvar_resumo_csv(resumo, nome_arquivo="summary.csv"):
             escritor.writerow(linha)
     return caminho
 
+
 def salvar_melhores_solucoes_por_algoritmo_csv(resultados, nome_arquivo="top_solutions_by_algorithm.csv", top_k=5):
     caminho = DIRETORIO_SAIDA / nome_arquivo
     linhas = []
@@ -280,22 +279,23 @@ def salvar_melhores_solucoes_por_algoritmo_csv(resultados, nome_arquivo="top_sol
         resultados_alg = [r.__dict__ for r in resultados if r.algoritmo == alg]
         melhores = melhores_solucaoes_distintas(resultados_alg, top_k=top_k)
         linhas.extend(melhores)
-    campos = [
-        "algoritmo",
-        "id_execucao",
-        "tempo_segundos",
-        "iteracoes",
-        "melhor_solucao",
-        "conflitos_finais",
-        "fitness_final",
-        "sucesso",
-    ]
+    campos = ["algoritmo", "id_execucao", "tempo_segundos", "iteracoes", "melhor_solucao", "conflitos_finais", "fitness_final", "sucesso"]
     with open(caminho, "w", newline="", encoding="utf-8") as f:
         escritor = csv.DictWriter(f, fieldnames=campos)
         escritor.writeheader()
         for linha in linhas:
             escritor.writerow(linha)
     return caminho
+
+
+def salvar_saida_resumo(resultados, resumo, caminhos):
+    payload = {
+        "total_execucoes": len(resultados),
+        "resumo": resumo,
+        "arquivos": caminhos
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+
 
 def argumentos():
     parser = argparse.ArgumentParser(description="8 Rainhas: GRASP e Algoritmo Genético")
@@ -308,26 +308,35 @@ def argumentos():
     parser.add_argument("--max-geracoes", type=int, default=1000)
     return parser.parse_args()
 
+
+
 def main():
     args = argumentos()
     resultados = executar_experimentos(
-        execucao_total=args.execucoes,
-        iteracoes_grasp=args.iteracoes_grasp,
-        tamanho_rcl=args.tamanho_rcl,
-        tamanho_populacao=args.populacao,
-        taxa_cruzamento=args.taxa_cruzamento,
-        taxa_mutacao=args.taxa_mutacao,
-        max_geracoes=args.max_geracoes,
+        args.execucoes,
+        args.iteracoes_grasp,
+        args.tamanho_rcl,
+        args.populacao,
+        args.taxa_cruzamento,
+        args.taxa_mutacao,
+        args.max_geracoes
     )
     resumo = resumir(resultados)
     caminho_resultados = salvar_resultados_csv(resultados)
     caminho_resumo = salvar_resumo_csv(resumo)
     caminho_top = salvar_melhores_solucoes_por_algoritmo_csv(resultados)
-    print("Saved:", caminho_resultados)
-    print("Saved:", caminho_resumo)
-    print("Saved:", caminho_top)
-    for linha in resumo:
-        print(linha)
+
+    caminhos = {
+        "resultados": str(caminho_resultados),
+        "resumo": str(caminho_resumo),
+        "top_solucoes": str(caminho_top),
+    }
+
+    salvar_saida_resumo(resultados, resumo, caminhos)
+    
+
+
+
 
 if __name__ == "__main__":
     main()
